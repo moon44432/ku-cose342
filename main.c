@@ -24,6 +24,9 @@ int main(int argc, char **argv)
     int sin_size;
     int opt = 1;
 
+    fd_set master_fds, temp_fds;
+    int fdmax;
+
     if (argc != 3)
     {
         printf("usage: %s <port#> <rootdir>\n", argv[0]);
@@ -52,16 +55,51 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    FD_ZERO(&master_fds);
+    FD_ZERO(&temp_fds);
+    FD_SET(sockfd, &master_fds);
+    fdmax = sockfd;
+
     while (1)
     {
-        sin_size = sizeof(struct sockaddr_in);
-        if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size)) == -1)
+        temp_fds = master_fds;
+        
+        if (select(fdmax + 1, &temp_fds, NULL, NULL, NULL) == -1)
         {
-            printf("err: accept\n");
-            break;
+            printf("err: select\n");
+            exit(1);
         }
-        printf("server: got connection from %s\n", inet_ntoa(their_addr.sin_addr));
-        req_handler(&new_fd, argv[2]);
+
+        for (int fd = 0; fd <= fdmax; fd++)
+        {
+            if (FD_ISSET(fd, &temp_fds))
+            {
+                if (fd == sockfd)
+                {
+                    sin_size = sizeof(struct sockaddr_in);
+                    if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size)) == -1)
+                    {
+                        printf("err: accept\n");
+                        break;
+                    }
+                    printf("server: got connection from %s\n", inet_ntoa(their_addr.sin_addr));
+                    
+                    FD_SET(new_fd, &master_fds);
+                    if (fdmax < new_fd)
+                    {
+                        fdmax = new_fd;
+                    }
+                }
+                else
+                {
+                    req_handler(&fd, argv[2]);
+
+                    FD_CLR(fd, &master_fds);
+                    shutdown(fd, SHUT_RDWR);
+                    close(fd);
+                }
+            }
+        }
     }
     close(new_fd);
     return 0;
@@ -89,9 +127,6 @@ void req_handler(void *req, char *rootdir)
 
     printf("METHOD: %s\nURL: %s\nVER: %s\n", METHOD, URL, VERSION);
     if (!strncmp(METHOD, "GET", 3)) GET_handler(VERSION, msg, URL, rootdir, sd);
-
-    shutdown(sd, SHUT_RDWR);
-    close(sd);
 }
 
 void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
