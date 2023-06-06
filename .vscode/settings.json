@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "inet.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "__config": "c"
     }
 }
