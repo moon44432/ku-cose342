@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
@@ -107,6 +108,8 @@ int main(int argc, char **argv)
             {
                 if (fd == sockfd)
                 {
+                    int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
+
                     sin_size = sizeof(struct sockaddr_in);
                     if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size)) == -1)
                     {
@@ -114,7 +117,6 @@ int main(int argc, char **argv)
                         break;
                     }
                     printf("server: got connection from %s, Conn [%d]\n", inet_ntoa(their_addr.sin_addr), new_fd);
-                    int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
                     FD_SET(new_fd, &master_fds);
                     if (fdmax < new_fd)
                     {
@@ -151,6 +153,7 @@ int main(int argc, char **argv)
                 }
             }
         }
+        usleep(1000);
     }
     close(new_fd);
     return 0;
