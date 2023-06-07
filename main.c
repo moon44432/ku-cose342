@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < MAX_CONN; i++)
     {
-        persistent_conn[i].is_persistent = 0;
+        persistent_conn[i].is_persistent = -1;
         persistent_conn[i].cnt = KEEP_ALIVE_MAX;
     }
 
@@ -99,11 +99,8 @@ int main(int argc, char **argv)
             exit(1);
         }
 
-        printf("fdmax: %d\n", fdmax);
-
         for (int fd = 0; fd <= fdmax; fd++)
         {
-            printf("%d, time: %d\n", fd, time(NULL) - persistent_conn[fd].timestamp);
             if (FD_ISSET(fd, &temp_fds))
             {
                 if (fd == sockfd)
@@ -116,7 +113,7 @@ int main(int argc, char **argv)
                         printf("err: accept\n");
                         break;
                     }
-                    printf("server: got connection from %s, Conn [%d]\n", inet_ntoa(their_addr.sin_addr), new_fd);
+                    printf("dbg: got connection from %s, conn #%d\n\n", inet_ntoa(their_addr.sin_addr), new_fd);
                     FD_SET(new_fd, &master_fds);
                     if (fdmax < new_fd)
                     {
@@ -126,30 +123,18 @@ int main(int argc, char **argv)
                 }
                 else
                 {
-                    if (persistent_conn[fd].is_persistent == 1 &&
-                        (persistent_conn[fd].cnt == 0 ||
-                        time(NULL) - persistent_conn[fd].timestamp > KEEP_ALIVE_TIMEOUT))
+                    if (persistent_conn[fd].is_persistent == 0 || 
+                        (persistent_conn[fd].is_persistent == 1 &&
+                            (persistent_conn[fd].cnt == 0 ||
+                            time(NULL) - persistent_conn[fd].timestamp > KEEP_ALIVE_TIMEOUT)))
                     {
                         FD_CLR(fd, &master_fds);
-                        shutdown(fd, SHUT_RDWR);
                         close(fd);
-                        printf("\n\n Conn [%d] Closed!!\n\n", fd);
-                        persistent_conn[fd].is_persistent = 0;
+                        printf("dbg: conn #%d closed\n\n", fd);
+                        persistent_conn[fd].is_persistent = -1;
                     }
 
                     req_handler(&fd, argv[2]);
-
-                    printf("!!\n");
-                    if (persistent_conn[fd].is_persistent == 0)
-                    {
-                        FD_CLR(fd, &master_fds);
-                        shutdown(fd, SHUT_RDWR);
-                        close(fd);
-                        printf("\n\n Conn [%d] Closed!!\n\n", fd);
-                        persistent_conn[fd].is_persistent = 0;
-                    }
-
-                    printf("!!!\n");
                 }
             }
         }
@@ -165,7 +150,7 @@ void req_handler(void *req, char *rootdir)
     char *firstline[3], *msghead;
 
     int sd = *(int *)req;
-    printf("Waiting Msg From %d...\n", sd);
+    printf("dbg: waiting msg from conn #%d...\n", sd);
 
     if (recv(sd, msg, BUFSIZE - 1, MSG_PEEK|MSG_DONTWAIT) == 0)
         return;
@@ -176,7 +161,7 @@ void req_handler(void *req, char *rootdir)
         printf("err: rcv\n");
         return;
     }
-    printf("===Req Message===\n%s\n=================\n", msg);
+    // printf("dbg: req message: \n%s\n\n", msg);
 
     char METHOD[4], VERSION[10], URL[SEND_MESSAGE_BUFSIZE];
 
@@ -186,17 +171,17 @@ void req_handler(void *req, char *rootdir)
     {
         if (strstr(connection_header, "keep-alive") != NULL)
         {
-            printf("Conn [%d]\n", sd);
-            if (persistent_conn[sd].is_persistent == 0)
+            printf("dbg: setting conn #%d\n", sd);
+            if (persistent_conn[sd].is_persistent == -1)
             {
-                printf("\nUsing Persistent Connection\n");
+                printf("dbg: use persistent connection\n");
                 persistent_conn[sd].is_persistent = 1;
                 persistent_conn[sd].cnt = KEEP_ALIVE_MAX;
             }
         }
         else
         {
-            printf("\nUsing Non-Persistent Connection\n");
+            printf("dbg: use non-persistent connection\n");
             persistent_conn[sd].is_persistent = 0;
         }
     }
@@ -205,7 +190,7 @@ void req_handler(void *req, char *rootdir)
     strcpy(URL, strtok(NULL, " \t"));
     strcpy(VERSION, strtok(NULL, " \t\n"));
 
-    printf("METHOD: %s\nURL: %s\nVER: %s\n", METHOD, URL, VERSION);
+    // printf("dbg: \nMETHOD: %s\nURL: %s\nVER: %s\n", METHOD, URL, VERSION);
 
     if (persistent_conn[sd].is_persistent == 1)
         persistent_conn[sd].cnt--;
@@ -215,7 +200,7 @@ void req_handler(void *req, char *rootdir)
     if (persistent_conn[sd].is_persistent == 1)
     {
         persistent_conn[sd].timestamp = time(NULL);
-        printf("Done! [%d] timestamp %d cnt %d\n", sd, persistent_conn[sd].timestamp, persistent_conn[sd].cnt);
+        printf("dbg: successfully handled request to conn #%d, timestamp %d, cnt %d\n\n", sd, persistent_conn[sd].timestamp, persistent_conn[sd].cnt);
     }
 }
 
@@ -246,13 +231,13 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
         strcpy(FINAL_PATH, rootdir);
         strcat(FINAL_PATH, url);
     }
-    printf("FINAL_PATH: %s\n", FINAL_PATH);
+    printf("dbg: send %s\n", FINAL_PATH);
 
     if ((fd = open(FINAL_PATH, O_RDONLY)) != -1)
     {
         if (persistent_conn[client].is_persistent == 1)
         {
-            printf("\nUsing Keep-Alive\n");
+            printf("dbg: use keep-alive method\n");
 
             char buf[512] = "";
             sprintf(buf, "HTTP/1.1 200 OK\nConnection: keep-alive\nKeep-Alive: timeout=%d, max=%d\n",
@@ -260,13 +245,13 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
 
             FILE *fp = fopen(FINAL_PATH, "r");
             fseek(fp, 0, SEEK_END);
-            printf("Length: %d\n", ftell(fp));
+            printf("dbg: file length: %d\n", ftell(fp));
             sprintf(buf + strlen(buf), "Content-Length: %d\n", ftell(fp));
             rewind(fp);
             fclose(fp);
 
             sprintf(buf + strlen(buf), "\n");
-            printf("\n SENDING:\n%s", buf);
+            // printf("dbg: \nSENDING:\n%s", buf);
             send(client, buf, strlen(buf), 0);
         }
         else
@@ -279,7 +264,7 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
             if (len <= 0) break;
             write(client, SEND_DATA, len);
         }
-        printf(" Completely sent %s!\n", FINAL_PATH);
+        printf("dbg: completely sent %s\n", FINAL_PATH);
     }
     else
     {
