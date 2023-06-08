@@ -133,7 +133,6 @@ int main(int argc, char **argv)
                         printf("dbg: conn #%d closed\n\n", fd);
                         persistent_conn[fd].is_persistent = -1;
                     }
-
                     req_handler(&fd, argv[2]);
                 }
             }
@@ -150,17 +149,17 @@ void req_handler(void *req, char *rootdir)
     char *firstline[3], *msghead;
 
     int sd = *(int *)req;
-    printf("dbg: waiting msg from conn #%d...\n", sd);
-
     if (recv(sd, msg, BUFSIZE - 1, MSG_PEEK|MSG_DONTWAIT) == 0)
         return;
 
+    printf("dbg: waiting msg from conn #%d...\n", sd);
     int rcvd = recv(sd, msg, BUFSIZE - 1, 0);
     if (rcvd <= 0)
     {
         printf("err: rcv\n");
         return;
     }
+    printf("dbg: received a request\n", msg);
     // printf("dbg: req message: \n%s\n\n", msg);
 
     char METHOD[4], VERSION[10], URL[SEND_MESSAGE_BUFSIZE];
@@ -171,7 +170,6 @@ void req_handler(void *req, char *rootdir)
     {
         if (strstr(connection_header, "keep-alive") != NULL)
         {
-            printf("dbg: setting conn #%d\n", sd);
             if (persistent_conn[sd].is_persistent == -1)
             {
                 printf("dbg: use persistent connection\n");
@@ -247,7 +245,6 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
             fseek(fp, 0, SEEK_END);
             printf("dbg: file length: %d\n", ftell(fp));
             sprintf(buf + strlen(buf), "Content-Length: %d\n", ftell(fp));
-            rewind(fp);
             fclose(fp);
 
             sprintf(buf + strlen(buf), "\n");
