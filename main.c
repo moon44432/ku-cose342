@@ -12,6 +12,7 @@
 
 #define BACKLOG 10
 #define BUFSIZE 65536
+#define HEADSIZE 8192
 #define SEND_MESSAGE_BUFSIZE 1024
 #define MAX_CONN 256
 
@@ -31,8 +32,7 @@ int main(int argc, char **argv)
     fd_set master_fds, temp_fds;
     int fdmax;
 
-    for (int i = 0; i < MAX_CONN; i++)
-        is_persistent[i] = 0;
+    for (int i = 0; i < MAX_CONN; i++) is_persistent[i] = 0;
 
     if (argc != 3)
     {
@@ -178,10 +178,9 @@ int req_handler(void *req, char *rootdir)
 
 void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
 {
-    int fd, len, is_rootdir = 0;
-    char SEND_DATA[SEND_MESSAGE_BUFSIZE];
-    char FINAL_PATH[BUFSIZE];
-    char VERSION[10], URL[SEND_MESSAGE_BUFSIZE];
+    int fd, len;
+    char SEND_DATA[SEND_MESSAGE_BUFSIZE], FINAL_PATH[BUFSIZE], VERSION[10], URL[SEND_MESSAGE_BUFSIZE];
+    char headbuf[HEADSIZE];
 
     strcpy(VERSION, ver);
     strcpy(URL, url);
@@ -192,17 +191,16 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
         return;
     }
     
+    strcpy(FINAL_PATH, rootdir);
     if (strlen(URL) == 1 && !strncmp(URL, "/", 1))
     {
-        strcpy(FINAL_PATH, rootdir);
         strcat(FINAL_PATH, "/index.html");
-        is_rootdir = 1;
     }
     else
     {
-        strcpy(FINAL_PATH, rootdir);
         strcat(FINAL_PATH, url);
     }
+
     printf("dbg: send %s\n", FINAL_PATH);
 
     if ((fd = open(FINAL_PATH, O_RDONLY)) != -1)
@@ -211,17 +209,16 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
         {
             printf("dbg: use keep-alive method\n");
 
-            char buf[512] = "";
-            sprintf(buf, "HTTP/1.1 200 OK\nConnection: keep-alive\n");
+            sprintf(headbuf, "HTTP/1.1 200 OK\nConnection: keep-alive\n");
 
             FILE *fp = fopen(FINAL_PATH, "r");
             fseek(fp, 0, SEEK_END);
             printf("dbg: file length: %d\n", ftell(fp));
-            sprintf(buf + strlen(buf), "Content-Length: %d\n", ftell(fp));
+            sprintf(headbuf + strlen(headbuf), "Content-Length: %d\n", ftell(fp));
             fclose(fp);
 
-            sprintf(buf + strlen(buf), "\n");
-            send(client, buf, strlen(buf), 0);
+            sprintf(headbuf + strlen(headbuf), "\n");
+            send(client, headbuf, strlen(headbuf), 0);
         }
         else
         {
