@@ -36,13 +36,13 @@ int main(int argc, char **argv)
 
     if (argc != 3)
     {
-        printf("usage: %s <port#> <rootdir>\n", argv[0]);
+        // printf("usage: %s <port#> <rootdir>\n", argv[0]);
         exit(1);
     }
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        printf("err: socket\n");
+        // printf("err: socket\n");
         exit(1);
     }
 
@@ -55,19 +55,19 @@ int main(int argc, char **argv)
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1)
     {
-        printf("err: sockopt\n");
+        // printf("err: sockopt\n");
         exit(1);
     }
     
     if (bind(sockfd, (struct sockaddr*)&my_addr, sizeof(struct sockaddr)) == -1)
     {
-        printf("err: bind\n");
+        // printf("err: bind\n");
         exit(1);
     }
 
     if (listen(sockfd, BACKLOG) == -1)
     {
-        printf("err: listen\n");
+        // printf("err: listen\n");
         exit(1);
     }
 
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
         
         if (select(fdmax + 1, &temp_fds, NULL, NULL, NULL) == -1)
         {
-            printf("err: select\n");
+            // printf("err: select\n");
             exit(1);
         }
 
@@ -95,10 +95,10 @@ int main(int argc, char **argv)
                     sin_size = sizeof(struct sockaddr_in);
                     if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size)) == -1)
                     {
-                        printf("err: accept\n");
+                        // printf("err: accept\n");
                         break;
                     }
-                    printf("dbg: got connection from %s, conn #%d\n\n", inet_ntoa(their_addr.sin_addr), new_fd);
+                    // printf("dbg: got connection from %s, conn #%d\n\n", inet_ntoa(their_addr.sin_addr), new_fd);
                     FD_SET(new_fd, &master_fds);
                     if (fdmax < new_fd)
                     {
@@ -113,7 +113,7 @@ int main(int argc, char **argv)
                     {
                         FD_CLR(fd, &master_fds);
                         close(fd);
-                        printf("dbg: conn #%d closed\n\n", fd);
+                        // printf("dbg: conn #%d closed\n\n", fd);
                         is_persistent[fd] = 0;
                     }
                 }
@@ -132,19 +132,19 @@ int req_handler(void *req, char *rootdir)
 
     int sd = *(int *)req;
 
-    printf("dbg: waiting msg from conn #%d...\n", sd);
+    // printf("dbg: waiting msg from conn #%d...\n", sd);
     int rcvd = recv(sd, msg, BUFSIZE - 1, 0);
     if (rcvd == 0)
     {
-        printf("dbg: client closed the connection\n");
+        // printf("dbg: client closed the connection\n");
         return 0;
     }
     if (rcvd < 0)
     {
-        printf("err: rcv\n");
+        // printf("err: rcv\n");
         return -1;
     }
-    printf("dbg: received a request\n", msg);
+    // printf("dbg: received a request\n", msg);
 
     char METHOD[4], VERSION[10], URL[SEND_MESSAGE_BUFSIZE];
 
@@ -154,12 +154,12 @@ int req_handler(void *req, char *rootdir)
     {
         if (strstr(connection_header, "keep-alive") != NULL)
         {
-            printf("dbg: use persistent connection\n");
+            // printf("dbg: use persistent connection\n");
             is_persistent[sd] = 1;
         }
         else
         {
-            printf("dbg: use non-persistent connection\n");
+            // printf("dbg: use non-persistent connection\n");
         }
     }
 
@@ -171,7 +171,7 @@ int req_handler(void *req, char *rootdir)
 
     if (is_persistent[sd] == 1)
     {
-        printf("dbg: successfully handled request to conn #%d\n\n", sd);
+        // printf("dbg: successfully handled request to conn #%d\n\n", sd);
     }
     return 1;
 }
@@ -201,19 +201,19 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
         strcat(FINAL_PATH, url);
     }
 
-    printf("dbg: send %s\n", FINAL_PATH);
+    // printf("dbg: send %s\n", FINAL_PATH);
 
     if ((fd = open(FINAL_PATH, O_RDONLY)) != -1)
     {
         if (is_persistent[client] == 1)
         {
-            printf("dbg: use keep-alive method\n");
+            // printf("dbg: use keep-alive method\n");
 
             sprintf(headbuf, "HTTP/1.1 200 OK\nConnection: keep-alive\n");
 
             FILE *fp = fopen(FINAL_PATH, "r");
             fseek(fp, 0, SEEK_END);
-            printf("dbg: file length: %d\n", ftell(fp));
+            // printf("dbg: file length: %d\n", ftell(fp));
             sprintf(headbuf + strlen(headbuf), "Content-Length: %d\n", ftell(fp));
             fclose(fp);
 
@@ -230,10 +230,10 @@ void GET_handler(char *ver, char *msg, char *url, char *rootdir, int client)
             if (len <= 0) break;
             write(client, SEND_DATA, len);
         }
-        printf("dbg: completely sent %s\n", FINAL_PATH);
+        // printf("dbg: completely sent %s\n", FINAL_PATH);
     }
     else
     {
-        send(client, "HTTP/1.1 404 Not Found\n", 23, 0);
+        send(client, "HTTP/1.1 404 Not Found\n\n", 24, 0);
     }
 }
